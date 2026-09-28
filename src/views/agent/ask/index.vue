@@ -80,7 +80,7 @@
 
 <script setup name="Ask">
 import { ChatDotRound, User, Promotion } from '@element-plus/icons-vue'
-import { askQuestion } from '@/api/agent/ask'
+import { askQuestion, clearConversation } from '@/api/agent/ask'
 
 const { proxy } = getCurrentInstance()
 
@@ -88,6 +88,7 @@ const inputText = ref('')
 const loading = ref(false)
 const messages = ref([])
 const chatBodyRef = ref(null)
+const conversationId = ref(null)
 
 const suggestions = [
   '你好，请介绍一下自己',
@@ -135,8 +136,17 @@ async function handleSend() {
   scrollToBottom()
 
   try {
-    const res = await askQuestion({ question: text, history: messages.value.slice(0, -1) })
-    const answer = res.data.answer || res.msg || '未收到回复'
+    // 首次提问不传 conversationId，后端创建会话后在响应中返回
+    const res = await askQuestion({
+      question: text,
+      conversationId: conversationId.value || undefined,
+      history: messages.value.slice(0, -1)
+    })
+    const data = res.data || {}
+    const answer = data.answer || res.msg || '未收到回复'
+    if (data.conversationId) {
+      conversationId.value = data.conversationId
+    }
     messages.value.push({ role: 'assistant', content: answer, time: getCurrentTime() })
   } catch (err) {
     // 接口失败时使用本地模拟回复，便于前端独立调试
@@ -154,8 +164,18 @@ function generateMockReply(q) {
 
 function handleClear() {
   if (messages.value.length === 0) return
-  proxy.$modal.confirm('确认清空当前对话？').then(() => {
+  proxy.$modal.confirm('确认清空当前对话？').then(async () => {
+    // 后端清除成功后才清空本地，保持前后端会话同步
+    if (conversationId.value) {
+      try {
+        await clearConversation(conversationId.value)
+      } catch (err) {
+        proxy.$modal.msgError('后端会话清除失败，本地对话已保留')
+        return
+      }
+    }
     messages.value = []
+    conversationId.value = null
   }).catch(() => {})
 }
 </script>

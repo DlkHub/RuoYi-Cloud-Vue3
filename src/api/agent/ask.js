@@ -8,3 +8,11 @@ export function askQuestion(data) {
     data: data
   })
 }
+
+// 清空指定会话的后端记忆
+export function clearConversation(conversationId) {
+  return request({
+    url: `/agent/ai/memory/${conversationId}`,
+    method: 'delete'
+  })
+}
